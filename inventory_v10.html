@@ -2492,9 +2492,11 @@ function importFile(e) {
 }
 function renderHistory() {
   const el = document.getElementById('history-list');
-  el.innerHTML = ioHistory.slice(0,200).map(h =>
-    `<div style="padding:8px 0;border-bottom:.5px solid var(--c-border);font-size:12px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>${esc(h.itemName)}</strong><span style="color:${h.op==='in'?'var(--c-success)':'var(--c-danger)'}">${h.op==='in'?'+'+'−'}${h.qty}</span></div><div style="color:var(--c-tx2);margin-top:2px">${h.stamp} ${h.note?'· '+esc(h.note):''}</div></div>`
-  ).join('') || '<div class="empty">履歴がありません</div>';
+  el.innerHTML = ioHistory.slice(0,200).map(h => {
+    const sign = h.op==='in' ? '+' : '-';
+    const color = h.op==='in' ? 'var(--c-success)' : 'var(--c-danger)';
+    return `<div style="padding:8px 0;border-bottom:.5px solid var(--c-border);font-size:12px"><div style="display:flex;justify-content:space-between;gap:8px"><strong>${esc(h.itemName)}</strong><span style="color:${color}">${sign}${h.qty}</span></div><div style="color:var(--c-tx2);margin-top:2px">${h.stamp||h.date||''} ${h.note ? '· '+esc(h.note) : ''}</div></div>`;
+  }).join('') || '<div class="empty">履歴がありません</div>';
 }
 function renderChangelog() {
   const labels = {create:'➕追加',update:'✏️編集',delete:'🗑削除',bulk_in:'📥一括入庫',bulk_out:'📤一括出庫',stocktake:'📋棚卸し',ne_sync:'🔄NE同期',zaico_import:'📥ZAICO取込',picking:'📋ピッキング',bulk_edit:'✏️一括編集'};
