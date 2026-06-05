@@ -701,6 +701,28 @@ input,select,textarea{font-family:var(--font)}
   </div>
 </div>
 
+<!-- PICKING MAP MODAL -->
+<div class="modal" id="pickmap-modal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr">
+      <h2>商品を紐付け</h2>
+      <button class="btn sm" onclick="closeModal('pickmap-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="pickmap-barcode-info" style="background:var(--c-bg2);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:13px"></div>
+      <div class="form-group">
+        <label>商品名で検索</label>
+        <input id="pickmap-search" type="search" placeholder="商品名を入力..." oninput="renderPickmapResults()" style="width:100%;padding:9px 11px;border:.5px solid var(--c-border2);border-radius:var(--r);font-size:14px;background:var(--c-bg);color:var(--c-tx)">
+      </div>
+      <div id="pickmap-results" style="max-height:320px;overflow-y:auto;border:.5px solid var(--c-border);border-radius:var(--r)"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal('pickmap-modal')" style="flex:1">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <img id="lightbox-img" src="" alt="">
@@ -970,6 +992,7 @@ function showApp() {
   document.getElementById('login-wrap').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-email').textContent = currentUser?.email || '';
+  loadPickingMap();
   syncFromCloud();
 }
 async function doLogin() {
@@ -2018,8 +2041,87 @@ async function completeStocktake() {
 }
 
 // =====================================================
-// PICKING LIST
+// PICKING BARCODE MAPPING（未登録バーコード→商品紐付け）
 // =====================================================
+const PICKMAP_KEY = 'inv2_pickmap'; // {barcode: itemId}
+let pickingMap = {};
+
+function loadPickingMap() {
+  pickingMap = ls(PICKMAP_KEY) || {};
+}
+function savePickingMap() {
+  lsSet(PICKMAP_KEY, pickingMap);
+}
+
+// 紐付けモーダルを開く
+let pickmapTargetBarcode = null;
+let pickmapTargetQty = 0;
+
+function openPickmapModal(barcode, qty) {
+  pickmapTargetBarcode = barcode;
+  pickmapTargetQty = qty;
+  document.getElementById('pickmap-barcode-info').innerHTML =
+    `<div style="font-size:12px;color:var(--c-tx2);margin-bottom:4px">未登録バーコード</div>
+     <div style="font-family:monospace;font-size:14px;font-weight:600">${esc(barcode)}</div>
+     <div style="font-size:12px;color:var(--c-tx2);margin-top:4px">出庫予定数: <strong>${qty}個</strong></div>`;
+  document.getElementById('pickmap-search').value = '';
+  renderPickmapResults();
+  openModal('pickmap-modal');
+  setTimeout(() => document.getElementById('pickmap-search').focus(), 100);
+}
+
+function renderPickmapResults() {
+  const q = (document.getElementById('pickmap-search').value || '').toLowerCase().trim();
+  const el = document.getElementById('pickmap-results');
+  const filtered = q
+    ? items.filter(i => i.name.toLowerCase().includes(q) || (i.barcode||'').toLowerCase().includes(q) || i.id.toLowerCase().includes(q))
+    : items.slice(0, 30);
+  if (!filtered.length) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--c-tx2);font-size:13px">該当なし</div>';
+    return;
+  }
+  el.innerHTML = filtered.slice(0, 50).map(i => `
+    <div onclick="applyPickmap('${esc(i.id)}')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:.5px solid var(--c-border);cursor:pointer;background:var(--c-bg)" onmouseover="this.style.background='var(--c-bg2)'" onmouseout="this.style.background='var(--c-bg)'">
+      ${thumbHtml(i)}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</div>
+        <div style="font-size:11px;color:var(--c-tx2);margin-top:2px">${esc(i.category||'')} ${i.location?'· 📍'+esc(i.location):''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:15px;font-weight:600">${i.qty}</div>
+        <div style="font-size:10px;color:var(--c-tx2)">在庫</div>
+      </div>
+    </div>`).join('');
+}
+
+async function applyPickmap(itemId) {
+  const item = items.find(i => i.id === itemId);
+  if (!item) return;
+  const barcode = pickmapTargetBarcode;
+  const qty     = pickmapTargetQty;
+
+  // マッピングを保存
+  pickingMap[barcode] = itemId;
+  savePickingMap();
+
+  // 出庫処理を実行
+  const oldQty = item.qty;
+  item.qty -= qty;
+  item.updatedAt = today();
+  const negNote = oldQty < qty ? `（マイナス在庫 ${oldQty}→${item.qty}）` : '';
+  const h = { itemId:item.id, itemName:item.name, op:'out', qty, note:`ピッキング手動紐付け [${barcode}]${negNote}` };
+  ioHistory.unshift({...h, stamp:nowStamp(), date:today()});
+  logChange('picking_map', item.id, item.name, {barcode, qty});
+
+  closeModal('pickmap-modal');
+  renderPickingArea();
+  renderList();
+  toast(`✓ ${item.name} に紐付け・${qty}個出庫しました`);
+
+  await dbUpsert(item);
+  await dbAddHistory([h]);
+}
+
 let lastPickingResult = null;
 function clearPicking() {
   if (pickingFiles.length && !confirm('ピッキングデータをクリアしますか？')) return;
@@ -2096,8 +2198,14 @@ function parseCsvFile(file) {
 function matchRows(pRows) {
   const byBarcode = new Map(items.filter(i=>i.barcode).map(i=>[i.barcode.trim(), i]));
   const byZaico   = new Map(items.filter(i=>i.zaicoId).map(i=>[i.zaicoId.trim(), i]));
+  const byId      = new Map(items.map(i=>[i.id, i]));
   return pRows.map(r => {
+    // 通常マッチング
     let item = byBarcode.get(r.barcode) || byZaico.get(r.barcode);
+    // マッピングテーブルを参照
+    if (!item && pickingMap[r.barcode]) {
+      item = byId.get(pickingMap[r.barcode]);
+    }
     if (!item) return {...r, matched:false, status:'missing'};
     const status = item.qty >= r.qty ? 'ok' : 'short';
     return {...r, matched:true, status, currentQty:item.qty, itemId:item.id, itemName:item.name};
@@ -2122,7 +2230,13 @@ function renderPickingArea() {
     const detailRows = matched.slice(0,50).map(r => {
       const c = r.status==='ok'?'matched':r.status==='short'?'short':'missing';
       const lbl = r.status==='ok'?'✓':r.status==='short'?'⚠不足':'✕未登録';
-      return `<div class="pr ${c}"><span>${lbl} ${esc(r.barcode)} ${esc(r.itemName||'')}</span><span>${r.qty}個${r.matched?`(在庫${r.currentQty})`:''}</span></div>`;
+      const isMapped = !!pickingMap[r.barcode];
+      const mappedNote = isMapped ? `<span style="font-size:10px;color:var(--c-info)">（マッピング済）</span>` : '';
+      // 未登録行はクリックで紐付けモーダルを開く
+      const clickAttr = r.status==='missing'
+        ? `style="cursor:pointer" onclick="openPickmapModal('${esc(r.barcode)}', ${r.qty})" title="クリックして商品と紐付け"`
+        : '';
+      return `<div class="pr ${c}" ${clickAttr}><span>${lbl} ${esc(r.barcode)} ${esc(r.itemName||'')} ${mappedNote}</span><span>${r.qty}個${r.matched?`(在庫${r.currentQty})`:''}</span></div>`;
     }).join('');
     return `<div class="${cls}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
