@@ -22,6 +22,11 @@
   --r:8px;--r2:12px;
   --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
   --font:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",sans-serif;
+  /* 文字サイズ（設定で変更可能） */
+  --fs-item-name:13px;
+  --fs-item-sub:11px;
+  --fs-item-qty:18px;
+  --fs-badge:11px;
 }
 @media(prefers-color-scheme:dark){:root{
   --c-bg:#1a1a1a;--c-bg2:#252525;--c-bg3:#1f1f1f;
@@ -77,16 +82,16 @@ input,select,textarea{font-family:var(--font)}
 .item-thumb{width:46px;height:46px;border-radius:var(--r);object-fit:cover;flex-shrink:0;background:var(--c-bg2);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--c-tx3)}
 .item-thumb img{width:100%;height:100%;border-radius:var(--r);object-fit:cover}
 .item-body{flex:1;min-width:0}
-.item-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
-.item-sub{font-size:11px;color:var(--c-tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.item-name{font-size:var(--fs-item-name);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px}
+.item-sub{font-size:var(--fs-item-sub);color:var(--c-tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
 .item-extra{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px}
-.item-extra span{font-size:11px;color:var(--c-tx2)}
+.item-extra span{font-size:var(--fs-item-sub);color:var(--c-tx2)}
 .item-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
 .item-check{width:22px;height:22px;border:1.5px solid var(--c-border2);border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px}
 .item-check.on{background:var(--c-tx);color:var(--c-bg);border-color:var(--c-tx)}
-.qty-num{font-size:18px;font-weight:600;line-height:1}
+.qty-num{font-size:var(--fs-item-qty);font-weight:600;line-height:1}
 /* ===== BADGES ===== */
-.badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500}
+.badge{display:inline-block;padding:2px 7px;border-radius:20px;font-size:var(--fs-badge);font-weight:500}
 .badge-ok{background:var(--c-success-bg);color:var(--c-success)}
 .badge-low{background:var(--c-warn-bg);color:var(--c-warn)}
 .badge-zero{background:var(--c-danger-bg);color:var(--c-danger)}
@@ -266,7 +271,7 @@ input,select,textarea{font-family:var(--font)}
     <div class="toolbar">
       <input class="search-input" type="search" id="search" placeholder="商品名・ID・バーコード" oninput="renderList()">
       <select id="filter-cat" onchange="renderList()"><option value="">全カテゴリ</option></select>
-      <select id="filter-stock" onchange="renderStats();renderList()">
+      <select id="filter-stock" onchange="renderList()">
         <option value="">全在庫</option>
         <option value="neg">⚠ マイナス</option>
         <option value="ok">在庫あり</option>
@@ -380,7 +385,6 @@ input,select,textarea{font-family:var(--font)}
         <button class="seg-btn" data-tab="import" onclick="dataTab('import')">取込</button>
         <button class="seg-btn" data-tab="picking" onclick="dataTab('picking')">📋 ピッキング</button>
         <button class="seg-btn" data-tab="ne" onclick="dataTab('ne')">🔄 NE比較</button>
-        <button class="seg-btn" data-tab="rules" onclick="dataTab('rules')">🔗 ルール</button>
         <button class="seg-btn" data-tab="history" onclick="dataTab('history')">入出庫</button>
         <button class="seg-btn" data-tab="changelog" onclick="dataTab('changelog')">変更</button>
         <button class="seg-btn" data-tab="settings" onclick="dataTab('settings')">⚙️ 設定</button>
@@ -429,8 +433,6 @@ input,select,textarea{font-family:var(--font)}
         <input type="file" id="ne-file" accept=".csv" style="display:none" onchange="loadNECsv(event)">
         <div id="ne-area"></div>
       </div>
-      <!-- LINK RULES -->
-      <div id="tab-rules" style="display:none"></div>
       <!-- HISTORY -->
       <div id="tab-history" style="display:none">
         <div style="font-size:11px;color:var(--c-tx2);margin-bottom:8px">入庫・出庫の記録（直近500件）</div>
@@ -481,6 +483,21 @@ input,select,textarea{font-family:var(--font)}
               <option value="name_asc">商品名 昇順</option>
               <option value="name_desc">商品名 降順</option>
             </select>
+          </div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-title">🔤 文字サイズ</div>
+          <div class="setting-row">
+            <span style="font-size:13px">商品名・サブ情報</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="btn sm" onclick="changeFontSize(-1)" style="width:32px;height:32px;font-size:18px;padding:0">−</button>
+              <span id="fs-label" style="font-size:13px;min-width:32px;text-align:center">標準</span>
+              <button class="btn sm" onclick="changeFontSize(1)" style="width:32px;height:32px;font-size:18px;padding:0">＋</button>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--c-tx2);padding:6px 0">
+            プレビュー：<span id="fs-preview" style="font-weight:500">商品名サンプル</span>
+            <span id="fs-preview-sub" style="color:var(--c-tx2)"> · カテゴリ · 保管場所</span>
           </div>
         </div>
         <div class="setting-group">
@@ -901,11 +918,47 @@ function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch
 // =====================================================
 // CONFIG
 // =====================================================
+// 文字サイズ設定
+const CFG_FONTSIZE = 'inv2_fontsize';
+const FONT_SIZES = [
+  { label:'小',    name:11, sub:10, qty:16, badge:10 },
+  { label:'標準',  name:13, sub:11, qty:18, badge:11 },
+  { label:'やや大',name:15, sub:13, qty:20, badge:12 },
+  { label:'大',    name:17, sub:14, qty:22, badge:13 },
+  { label:'特大',  name:19, sub:16, qty:24, badge:14 },
+];
+let fontSizeIdx = 1; // デフォルト: 標準
+
+function applyFontSize(idx) {
+  fontSizeIdx = Math.max(0, Math.min(FONT_SIZES.length-1, idx));
+  const fs = FONT_SIZES[fontSizeIdx];
+  const root = document.documentElement;
+  root.style.setProperty('--fs-item-name', fs.name + 'px');
+  root.style.setProperty('--fs-item-sub',  fs.sub  + 'px');
+  root.style.setProperty('--fs-item-qty',  fs.qty  + 'px');
+  root.style.setProperty('--fs-badge',     fs.badge+ 'px');
+  // プレビュー更新
+  const lbl = document.getElementById('fs-label');
+  const prev = document.getElementById('fs-preview');
+  const prevSub = document.getElementById('fs-preview-sub');
+  if (lbl) lbl.textContent = fs.label;
+  if (prev) prev.style.fontSize = fs.name + 'px';
+  if (prevSub) prevSub.style.fontSize = fs.sub + 'px';
+}
+function changeFontSize(delta) {
+  applyFontSize(fontSizeIdx + delta);
+  lsSet(CFG_FONTSIZE, fontSizeIdx);
+  renderList();
+  toast(`文字サイズ: ${FONT_SIZES[fontSizeIdx].label}`);
+}
+
 function loadCfg() {
   pageSize    = parseInt(ls(CFG_PAGESIZE)) || 100;
   currentSort = ls(CFG_SORT)    || 'zaicoUpdatedAt_desc';
   listFields  = ls(CFG_FIELDS)  || {};
   LIST_FIELD_DEFS.forEach(f => { if (listFields[f.key] === undefined) listFields[f.key] = f.def; });
+  fontSizeIdx = parseInt(ls(CFG_FONTSIZE)) || 1;
+  applyFontSize(fontSizeIdx);
 }
 function saveCfg() {
   const scanner = document.getElementById('cfg-scanner')?.value || 'camera';
@@ -944,6 +997,8 @@ function renderCfgUI() {
   el('cfg-sort',     sort);
   const vib = document.getElementById('cfg-vibrate'); if(vib) vib.checked = vibrate;
   const snd = document.getElementById('cfg-sound');   if(snd) snd.checked = sound;
+  // 文字サイズ
+  applyFontSize(fontSizeIdx);
   // list fields
   const lfc = document.getElementById('list-fields-cfg');
   if (lfc) {
@@ -991,11 +1046,11 @@ function showLogin() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('sync-badge').style.display = 'none';
 }
-async function showApp() {
+function showApp() {
   document.getElementById('login-wrap').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-email').textContent = currentUser?.email || '';
-  await loadPickingMap();
+  loadPickingMap();
   syncFromCloud();
 }
 async function doLogin() {
@@ -1229,25 +1284,16 @@ function renderStats() {
   }
   totalVal = Math.round(totalVal);
   const grid = document.getElementById('stats-grid');
-  const cur = document.getElementById('filter-stock')?.value || '';
-  // アクティブなカードを枠線でハイライト（ドロップダウンと同期）
-  const act  = v => cur === v ? 'outline:2px solid var(--c-info);outline-offset:-2px;' : '';
-  const actW = cur === 'neg' ? 'outline:2px solid #fff;outline-offset:-2px;' : '';
   grid.innerHTML = `
-    <div class="stat-card" style="cursor:pointer;${act('')}" onclick="filterByStatus('')"><div class="stat-label">商品数</div><div class="stat-val">${items.length}</div></div>
-    ${neg ? `<div class="stat-card" style="background:#7c1f1f;cursor:pointer;${actW}" onclick="filterByStatus('neg')"><div class="stat-label" style="color:rgba(255,255,255,.7)">⚠ マイナス</div><div class="stat-val" style="color:#fff">${neg}</div></div>` : ''}
-    <div class="stat-card" style="cursor:pointer;${act('zero')}" onclick="filterByStatus('zero')"><div class="stat-label">在庫なし</div><div class="stat-val" style="color:var(--c-danger)">${zero}</div></div>
-    <div class="stat-card" style="cursor:pointer;${act('low')}" onclick="filterByStatus('low')"><div class="stat-label">少量警告</div><div class="stat-val" style="color:var(--c-warn)">${low}</div></div>
+    <div class="stat-card"><div class="stat-label">商品数</div><div class="stat-val">${items.length}</div></div>
+    ${neg ? `<div class="stat-card" style="background:#7c1f1f;cursor:pointer" onclick="filterByStatus('neg')"><div class="stat-label" style="color:rgba(255,255,255,.7)">⚠ マイナス</div><div class="stat-val" style="color:#fff">${neg}</div></div>` : ''}
+    <div class="stat-card"><div class="stat-label">在庫なし</div><div class="stat-val" style="color:var(--c-danger)">${zero}</div></div>
+    <div class="stat-card"><div class="stat-label">少量警告</div><div class="stat-val" style="color:var(--c-warn)">${low}</div></div>
     <div class="stat-card"><div class="stat-label">在庫総額(円)</div><div class="stat-val" style="font-size:13px">¥${totalVal.toLocaleString()}</div></div>`;
 }
 function filterByStatus(s) {
-  const sel = document.getElementById('filter-stock');
-  if (!sel) return;
-  // 同じカードを再度押したら解除（「商品数」は常に全在庫へ）
-  if (s !== '' && sel.value === s) s = '';
-  sel.value = s;
+  document.getElementById('filter-stock').value = s;
   currentPage = 1;
-  renderStats();   // ハイライト更新
   renderList();
 }
 
@@ -2053,132 +2099,16 @@ async function completeStocktake() {
 }
 
 // =====================================================
-// 紐付けルール（コード→商品）= Supabase link_rules
-//   旧 localStorage pickingMap を置き換え。VPS/全端末で共有。
+// PICKING BARCODE MAPPING（未登録バーコード→商品紐付け）
 // =====================================================
-const PICKMAP_KEY = 'inv2_pickmap';        // 旧データ移行 & オフラインキャッシュ
-const LINKRULES_CACHE = 'inv2_linkrules';  // ルール本体のオフラインキャッシュ
-let linkRules = [];                         // [{code,item_id,enabled,note,hit_count,last_used_at,created_at}]
-let linkRulesEnabled = true;                // ルール機能全体のON/OFF
-let pickingMap = {};                        // {code: item_id} 有効ルールのみの高速参照表
+const PICKMAP_KEY = 'inv2_pickmap'; // {barcode: itemId}
+let pickingMap = {};
 
-function rebuildPickmap() {
-  pickingMap = {};
-  for (const r of linkRules) {
-    if (r.enabled) pickingMap[r.code] = r.item_id;
-  }
-  // オフライン用キャッシュ
-  lsSet(LINKRULES_CACHE, linkRules);
+function loadPickingMap() {
+  pickingMap = ls(PICKMAP_KEY) || {};
 }
-
-// 初期ロード：Supabaseから取得→無ければlocalStorageから移行
-async function loadPickingMap() {
-  // 1) 機能全体のON/OFF設定
-  try {
-    const { data } = await db.from('app_settings').select('value').eq('key','link_rules_enabled').maybeSingle();
-    if (data && typeof data.value === 'boolean') linkRulesEnabled = data.value;
-    else if (data && data.value && typeof data.value.on === 'boolean') linkRulesEnabled = data.value.on;
-  } catch(e) { /* 設定なし=デフォルトtrue */ }
-
-  // 2) ルール本体
-  try {
-    const { data, error } = await db.from('link_rules').select('*').order('created_at',{ascending:false});
-    if (error) throw error;
-    linkRules = data || [];
-
-    // 3) 旧 localStorage ルールが残っていれば一度だけ移行
-    const legacy = ls(PICKMAP_KEY);
-    if (legacy && Object.keys(legacy).length && !linkRules.length) {
-      const rows = Object.entries(legacy).map(([code,item_id]) => ({code, item_id, enabled:true, note:'localStorageから移行'}));
-      const { error: e2 } = await db.from('link_rules').upsert(rows);
-      if (!e2) {
-        linkRules = rows.map(r => ({...r, hit_count:0, last_used_at:null, created_at:new Date().toISOString()}));
-        localStorage.removeItem(PICKMAP_KEY);
-        toast(`紐付けルール ${rows.length}件をクラウドへ移行しました`);
-      }
-    }
-  } catch(e) {
-    // オフライン時はキャッシュから
-    linkRules = ls(LINKRULES_CACHE) || [];
-  }
-  rebuildPickmap();
-}
-
-// ルールを保存（新規/更新）
-async function saveLinkRule(code, itemId, note) {
-  const row = { code, item_id:itemId, enabled:true, note: note||null };
-  // ローカル即時反映
-  const idx = linkRules.findIndex(r => r.code === code);
-  if (idx >= 0) linkRules[idx] = {...linkRules[idx], ...row};
-  else linkRules.unshift({...row, hit_count:0, last_used_at:null, created_at:new Date().toISOString()});
-  rebuildPickmap();
-  try {
-    const { error } = await db.from('link_rules').upsert(row);
-    if (error) throw error;
-  } catch(e) {
-    toast('⚠ ルールのクラウド保存に失敗（オフライン？）', 3000);
-  }
-}
-
-// 個別ルールのON/OFF
-async function toggleLinkRule(code, enabled) {
-  const r = linkRules.find(x => x.code === code);
-  if (r) r.enabled = enabled;
-  rebuildPickmap();
-  renderRulesArea();
-  try { await db.from('link_rules').update({enabled}).eq('code', code); }
-  catch(e) { toast('⚠ 保存失敗（オフライン？）', 3000); }
-}
-
-// ルール削除
-async function deleteLinkRule(code) {
-  if (!confirm(`このルールを削除しますか？\n${code}`)) return;
-  linkRules = linkRules.filter(r => r.code !== code);
-  rebuildPickmap();
-  renderRulesArea();
-  try { await db.from('link_rules').delete().eq('code', code); }
-  catch(e) { toast('⚠ 削除失敗（オフライン？）', 3000); }
-  toast('ルールを削除しました');
-}
-
-// 機能全体のON/OFF
-async function setLinkRulesEnabled(on) {
-  linkRulesEnabled = on;
-  renderRulesArea();
-  try { await db.from('app_settings').upsert({ key:'link_rules_enabled', value:on }); }
-  catch(e) { toast('⚠ 設定保存失敗（オフライン？）', 3000); }
-}
-
-// 適用ログを記録（手動紐付け & 自動マッチ時）+ ヒット数更新
-async function logRuleApplication(entries) {
-  // entries: [{code,item_id,item_name,qty,source,file_name}]
-  if (!entries.length) return;
-  const now = new Date().toISOString();
-  // ローカルのヒット数即時反映
-  for (const e of entries) {
-    const r = linkRules.find(x => x.code === e.code);
-    if (r) { r.hit_count = (r.hit_count||0) + 1; r.last_used_at = now; }
-  }
-  rebuildPickmap();
-  try {
-    await db.from('link_rule_log').insert(entries.map(e => ({
-      code:e.code, item_id:e.item_id, item_name:e.item_name,
-      qty:e.qty, source:e.source, file_name:e.file_name||null
-    })));
-    // ヒット数 / 最終使用日時を更新
-    for (const e of entries) {
-      const r = linkRules.find(x => x.code === e.code);
-      if (r) await db.from('link_rules').update({ hit_count:r.hit_count, last_used_at:now }).eq('code', e.code);
-    }
-  } catch(err) { /* ログ失敗は致命ではない */ }
-}
-
-// あるコードの適用履歴を取得
-async function loadRuleLog(code) {
-  try {
-    const { data } = await db.from('link_rule_log').select('*').eq('code', code).order('applied_at',{ascending:false}).limit(50);
-    return data || [];
-  } catch(e) { return []; }
+function savePickingMap() {
+  lsSet(PICKMAP_KEY, pickingMap);
 }
 
 // 紐付けモーダルを開く
@@ -2228,9 +2158,9 @@ async function applyPickmap(itemId) {
   const barcode = pickmapTargetBarcode;
   const qty     = pickmapTargetQty;
 
-  // ルールを保存（Supabase）＋適用ログ
-  await saveLinkRule(barcode, itemId, null);
-  await logRuleApplication([{code:barcode, item_id:item.id, item_name:item.name, qty, source:'manual', file_name:null}]);
+  // マッピングを保存
+  pickingMap[barcode] = itemId;
+  savePickingMap();
 
   // 出庫処理を実行
   const oldQty = item.qty;
@@ -2248,80 +2178,6 @@ async function applyPickmap(itemId) {
 
   await dbUpsert(item);
   await dbAddHistory([h]);
-}
-
-// =====================================================
-// ルール管理画面（データ → 🔗 ルール）
-// =====================================================
-let ruleLogOpen = null; // 展開中のコード
-
-async function renderRulesArea() {
-  const el = document.getElementById('tab-rules');
-  if (!el) return;
-  const enabledCount = linkRules.filter(r => r.enabled).length;
-  const byId = new Map(items.map(i => [i.id, i]));
-
-  let html = `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--c-bg2);padding:12px 14px;border-radius:var(--r);margin-bottom:12px">
-      <div>
-        <div style="font-size:14px;font-weight:600">ルール記憶機能</div>
-        <div style="font-size:11px;color:var(--c-tx2);margin-top:2px">OFFにすると自動紐付けを停止（手動紐付けは可能）</div>
-      </div>
-      <label style="position:relative;display:inline-block;width:48px;height:26px;flex-shrink:0">
-        <input type="checkbox" ${linkRulesEnabled?'checked':''} onchange="setLinkRulesEnabled(this.checked)" style="opacity:0;width:0;height:0">
-        <span style="position:absolute;cursor:pointer;inset:0;background:${linkRulesEnabled?'var(--c-success)':'var(--c-border2)'};border-radius:26px;transition:.2s">
-          <span style="position:absolute;height:20px;width:20px;left:${linkRulesEnabled?'25px':'3px'};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span>
-        </span>
-      </label>
-    </div>
-    <div style="font-size:12px;color:var(--c-tx2);margin-bottom:10px">記憶済みルール: ${linkRules.length}件（有効 ${enabledCount}件）</div>`;
-
-  if (!linkRules.length) {
-    html += '<div style="padding:24px;text-align:center;color:var(--c-tx2);font-size:13px">まだルールがありません。<br>ピッキングの未登録バーコードを商品に紐付けると、ここに記憶されます。</div>';
-    el.innerHTML = html;
-    return;
-  }
-
-  for (const r of linkRules) {
-    const item = byId.get(r.item_id);
-    const name = item ? item.name : `（商品が見つかりません: ${r.item_id}）`;
-    const last = r.last_used_at ? new Date(r.last_used_at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
-    const open = ruleLogOpen === r.code;
-    html += `
-    <div style="border:.5px solid var(--c-border);border-radius:var(--r);margin-bottom:8px;overflow:hidden;${r.enabled?'':'opacity:.55'}">
-      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px">
-        <div style="flex:1;min-width:0;cursor:pointer" onclick="toggleRuleLog('${esc(r.code)}')">
-          <div style="font-family:monospace;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.code)}</div>
-          <div style="font-size:12px;color:var(--c-tx2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">→ ${esc(name)}</div>
-          <div style="font-size:10px;color:var(--c-tx3);margin-top:3px">適用 ${r.hit_count||0}回 · 最終 ${last} ${open?'▲':'▼'}</div>
-        </div>
-        <label style="position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0" title="このルールのON/OFF">
-          <input type="checkbox" ${r.enabled?'checked':''} onchange="toggleLinkRule('${esc(r.code)}', this.checked)" style="opacity:0;width:0;height:0">
-          <span style="position:absolute;cursor:pointer;inset:0;background:${r.enabled?'var(--c-success)':'var(--c-border2)'};border-radius:24px;transition:.2s">
-            <span style="position:absolute;height:18px;width:18px;left:${r.enabled?'21px':'3px'};bottom:3px;background:#fff;border-radius:50%;transition:.2s"></span>
-          </span>
-        </label>
-        <button class="btn sm danger" onclick="deleteLinkRule('${esc(r.code)}')" style="flex-shrink:0;padding:5px 8px">削除</button>
-      </div>
-      <div id="rulelog-${esc(r.code)}" style="display:${open?'block':'none'};border-top:.5px solid var(--c-border);background:var(--c-bg2);padding:8px 12px;font-size:11px;color:var(--c-tx2)">読み込み中…</div>
-    </div>`;
-  }
-  el.innerHTML = html;
-}
-
-async function toggleRuleLog(code) {
-  if (ruleLogOpen === code) { ruleLogOpen = null; renderRulesArea(); return; }
-  ruleLogOpen = code;
-  renderRulesArea();
-  const box = document.getElementById('rulelog-'+code);
-  if (!box) return;
-  const logs = await loadRuleLog(code);
-  if (!logs.length) { box.innerHTML = 'まだ適用履歴がありません'; return; }
-  box.innerHTML = '<div style="font-weight:600;margin-bottom:4px">適用履歴（最新50件）</div>' + logs.map(l => {
-    const when = new Date(l.applied_at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    const src = {manual:'手動',picking:'ピッキング',ne:'NE比較',vps:'自動(VPS)'}[l.source] || l.source || '';
-    return `<div style="padding:3px 0;border-top:.5px solid var(--c-border)">${when} · ${esc(src)} · ${l.qty||0}個 ${l.file_name?'· '+esc(l.file_name):''}</div>`;
-  }).join('');
 }
 
 let lastPickingResult = null;
@@ -2404,15 +2260,13 @@ function matchRows(pRows) {
   return pRows.map(r => {
     // 通常マッチング
     let item = byBarcode.get(r.barcode) || byZaico.get(r.barcode);
-    let viaRule = false;
-    // 記憶ルールを参照（機能ONのときだけ）
-    if (!item && linkRulesEnabled && pickingMap[r.barcode]) {
+    // マッピングテーブルを参照
+    if (!item && pickingMap[r.barcode]) {
       item = byId.get(pickingMap[r.barcode]);
-      if (item) viaRule = true;
     }
     if (!item) return {...r, matched:false, status:'missing'};
     const status = item.qty >= r.qty ? 'ok' : 'short';
-    return {...r, matched:true, status, currentQty:item.qty, itemId:item.id, itemName:item.name, viaRule};
+    return {...r, matched:true, status, currentQty:item.qty, itemId:item.id, itemName:item.name};
   });
 }
 function renderPickingArea() {
@@ -2480,7 +2334,6 @@ async function execPicking() {
   if (!confirm(msg+'\n\n実行してよろしいですか？')) return;
   valid.sort((a,b)=>a.date.localeCompare(b.date));
   const modified=new Map(), histEntries=[], issues={missing:[],short:[]};
-  const ruleApplied=[];
   for (const pf of valid) {
     const matched = matchRows(pf.rows);
     for (const r of matched) {
@@ -2494,7 +2347,6 @@ async function execPicking() {
       histEntries.push(h);
       ioHistory.unshift({...h,stamp:pf.date+' 00:00:00',date:pf.date});
       modified.set(item.id, item);
-      if (r.viaRule) ruleApplied.push({code:r.barcode, item_id:item.id, item_name:item.name, qty:r.qty, source:'picking', file_name:pf.name});
     }
   }
   lastPickingResult = issues;
@@ -2504,7 +2356,6 @@ async function execPicking() {
   if (issues.missing.length||issues.short.length) showPickingReport(issues, modified.size);
   await dbUpsertMany([...modified.values()]);
   await dbAddHistory(histEntries);
-  if (ruleApplied.length) await logRuleApplication(ruleApplied);
 }
 function showPickingReport(issues, processed) {
   const mGroups={};
@@ -2752,7 +2603,7 @@ function importZaico(e) {
 // DATA TAB
 // =====================================================
 function dataTab(tab) {
-  ['export','import','picking','ne','rules','history','changelog','settings'].forEach(t => {
+  ['export','import','picking','ne','history','changelog','settings'].forEach(t => {
     const el = document.getElementById('tab-'+t);
     if (el) el.style.display = t===tab ? '' : 'none';
   });
@@ -2760,7 +2611,6 @@ function dataTab(tab) {
   if (tab==='history')   renderHistory();
   if (tab==='changelog') renderChangelog();
   if (tab==='settings')  renderCfgUI();
-  if (tab==='rules')     renderRulesArea();
 }
 function exportCSV() { doCSVExport(items, '在庫_'+today()+'.csv'); toast('CSV出力しました'); }
 function exportJSON() {
