@@ -279,10 +279,10 @@ input,select,textarea{font-family:var(--font)}
         <option value="zero">在庫なし</option>
       </select>
       <select id="sort-sel" onchange="onSortChange()">
-        <option value="zaicoUpdatedAt_desc">ZAICO更新日 新→古</option>
-        <option value="zaicoUpdatedAt_asc">ZAICO更新日 古→新</option>
-        <option value="zaicoCreatedAt_desc">ZAICO作成日 新→古</option>
-        <option value="zaicoCreatedAt_asc">ZAICO作成日 古→新</option>
+        <option value="updatedAt_desc">更新日 新→古</option>
+        <option value="updatedAt_asc">更新日 古→新</option>
+        <option value="createdAt_desc">登録日 新→古</option>
+        <option value="createdAt_asc">登録日 古→新</option>
         <option value="qty_desc">在庫数 多→少</option>
         <option value="qty_asc">在庫数 少→多</option>
         <option value="totalVal_desc">在庫金額 高→低</option>
@@ -468,10 +468,10 @@ input,select,textarea{font-family:var(--font)}
           <div class="setting-row">
             <label>並び替え</label>
             <select id="cfg-sort" onchange="saveCfg()">
-              <option value="zaicoUpdatedAt_desc">ZAICO更新日 新→古</option>
-              <option value="zaicoUpdatedAt_asc">ZAICO更新日 古→新</option>
-              <option value="zaicoCreatedAt_desc">ZAICO作成日 新→古</option>
-              <option value="zaicoCreatedAt_asc">ZAICO作成日 古→新</option>
+              <option value="updatedAt_desc">更新日 新→古</option>
+              <option value="updatedAt_asc">更新日 古→新</option>
+              <option value="createdAt_desc">登録日 新→古</option>
+              <option value="createdAt_asc">登録日 古→新</option>
               <option value="qty_desc">在庫数 多→少</option>
               <option value="qty_asc">在庫数 少→多</option>
               <option value="totalVal_desc">在庫金額 高→低</option>
@@ -865,7 +865,7 @@ let scanCartUnknown = [];
 // UI state
 let currentPage = 1;
 let pageSize = 100;
-let currentSort = 'zaicoUpdatedAt_desc';
+let currentSort = 'updatedAt_desc';
 let selMode = false;
 let selectedIds = new Set();
 let editingId = null;
@@ -893,7 +893,7 @@ const LIST_FIELD_DEFS = [
   { key:'totalVal',     label:'在庫金額',            def:false },
   { key:'barcode',      label:'バーコード',          def:false },
   { key:'receivedDate', label:'入荷日',              def:false },
-  { key:'updatedAt',    label:'ZAICO更新日',         def:false },
+  { key:'updatedAt',    label:'更新日',         def:false },
   { key:'status',       label:'状態',               def:false },
 ];
 let listFields = {};
@@ -954,7 +954,7 @@ function changeFontSize(delta) {
 
 function loadCfg() {
   pageSize    = parseInt(ls(CFG_PAGESIZE)) || 100;
-  currentSort = ls(CFG_SORT)    || 'zaicoUpdatedAt_desc';
+  currentSort = ls(CFG_SORT)    || 'updatedAt_desc';
   listFields  = ls(CFG_FIELDS)  || {};
   LIST_FIELD_DEFS.forEach(f => { if (listFields[f.key] === undefined) listFields[f.key] = f.def; });
   fontSizeIdx = parseInt(ls(CFG_FONTSIZE)) || 1;
@@ -963,7 +963,7 @@ function loadCfg() {
 function saveCfg() {
   const scanner = document.getElementById('cfg-scanner')?.value || 'camera';
   const ps      = document.getElementById('cfg-pagesize')?.value || '100';
-  const sort    = document.getElementById('cfg-sort')?.value || 'zaicoUpdatedAt_desc';
+  const sort    = document.getElementById('cfg-sort')?.value || 'updatedAt_desc';
   const vibrate = document.getElementById('cfg-vibrate')?.checked || false;
   const sound   = document.getElementById('cfg-sound')?.checked || false;
   lsSet(CFG_SCANNER,  scanner);
@@ -988,7 +988,7 @@ function saveCfg() {
 function renderCfgUI() {
   const scanner = ls(CFG_SCANNER) || 'camera';
   const ps      = ls(CFG_PAGESIZE)|| 100;
-  const sort    = ls(CFG_SORT)    || 'zaicoUpdatedAt_desc';
+  const sort    = ls(CFG_SORT)    || 'updatedAt_desc';
   const vibrate = ls(CFG_VIBRATE) || false;
   const sound   = ls(CFG_SOUND)   || false;
   const el = (id, v) => { const e = document.getElementById(id); if(e) e.value = String(v); };
