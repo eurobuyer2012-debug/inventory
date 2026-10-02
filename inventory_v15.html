@@ -283,6 +283,8 @@ input,select,textarea{font-family:var(--font)}
         <option value="updatedAt_asc">更新日 古→新</option>
         <option value="createdAt_desc">登録日 新→古</option>
         <option value="createdAt_asc">登録日 古→新</option>
+        <option value="lastStocktakeAt_desc">棚卸日 新→古</option>
+        <option value="lastStocktakeAt_asc">棚卸日 古→新（未実施が先）</option>
         <option value="qty_desc">在庫数 多→少</option>
         <option value="qty_asc">在庫数 少→多</option>
         <option value="totalVal_desc">在庫金額 高→低</option>
@@ -353,6 +355,7 @@ input,select,textarea{font-family:var(--font)}
           <button class="btn sm primary" onclick="completeStocktake()">✓ 完了</button>
         </div>
       </div>
+      <div id="st-draft-banner" style="display:none;background:var(--c-warn-bg);color:var(--c-warn);padding:8px 12px;border-radius:var(--r);margin-bottom:10px;font-size:12px;font-weight:600"></div>
       <div id="st-scan-area" style="display:none;background:var(--c-info-bg);padding:10px 12px;border-radius:var(--r);margin-bottom:10px;font-size:12px">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
           <strong>📷 スキャンモード ON</strong>
@@ -513,6 +516,8 @@ input,select,textarea{font-family:var(--font)}
               <option value="updatedAt_asc">更新日 古→新</option>
               <option value="createdAt_desc">登録日 新→古</option>
               <option value="createdAt_asc">登録日 古→新</option>
+        <option value="lastStocktakeAt_desc">棚卸日 新→古</option>
+        <option value="lastStocktakeAt_asc">棚卸日 古→新（未実施が先）</option>
               <option value="qty_desc">在庫数 多→少</option>
               <option value="qty_asc">在庫数 少→多</option>
               <option value="totalVal_desc">在庫金額 高→低</option>
@@ -749,8 +754,11 @@ input,select,textarea{font-family:var(--font)}
   <div class="camera-hdr">
     <button class="btn sm" onclick="closeCameraScan()">✕</button>
     <h3 id="camera-title">連続スキャン</h3>
-    <button class="btn sm" onclick="openScanCart()">📋 確認</button>
+    <button class="btn sm" onclick="document.getElementById('camera-photo-input').click()">📷 写真</button>
+    <button class="btn sm" id="camera-cart-btn" onclick="openScanCart()">📋 確認</button>
   </div>
+  <input type="file" id="camera-photo-input" accept="image/*" capture="environment" style="display:none" onchange="scanFromPhoto(event)">
+  <div id="camera-photo-reader" style="display:none"></div>
   <div id="camera-reader-wrap"><div id="camera-reader"></div>
     <div id="camera-status" class="camera-status">商品のQR/バーコードをかざしてください</div>
   </div>
@@ -1024,6 +1032,7 @@ const LIST_FIELD_DEFS = [
   { key:'barcode',      label:'バーコード',          def:false },
   { key:'receivedDate', label:'入荷日',              def:false },
   { key:'updatedAt',    label:'更新日',         def:false },
+  { key:'lastStocktakeAt', label:'棚卸日',        def:true  },
   { key:'status',       label:'状態',               def:false },
 ];
 let listFields = {};
@@ -1166,6 +1175,7 @@ async function initApp() {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
   });
   loadCfg();
+  loadStDraft();
   const { data: { session } } = await db.auth.getSession();
   if (session?.user) { currentUser = session.user; showApp(); }
   else showLogin();
@@ -1297,7 +1307,8 @@ async function dbUpsert(item) {
   } catch(e) { console.error('upsert error:', e); }
 }
 async function dbUpsertMany(itemArr) {
-  if (!db || !itemArr.length) return;
+  if (!db) return false;
+  if (!itemArr.length) return true;
   try {
     setSyncStatus('syncing', `${itemArr.length}件保存中...`);
     const rows = itemArr.map(itemToRow);
@@ -1307,9 +1318,11 @@ async function dbUpsertMany(itemArr) {
     }
     setSyncStatus('ok', '保存完了');
     setTimeout(() => setSyncStatus('ok', 'オンライン'), 1500);
+    return true;
   } catch(e) {
     console.error('upsert many error:', e);
     setSyncStatus('err', '保存エラー');
+    return false;
   }
 }
 async function dbDelete(ids) {
@@ -1347,6 +1360,13 @@ async function dbAddChangeLog(entry) {
 // HELPERS
 // =====================================================
 function today() { return new Date().toISOString().split('T')[0]; }
+function fmtJst(stamp, withTime=false) {
+  if (!stamp) return '';
+  const d = new Date(String(stamp).replace(' ','T') + 'Z');
+  if (isNaN(d)) return String(stamp);
+  const j = new Date(d.getTime() + 9*3600*1000).toISOString();
+  return withTime ? j.substring(0,16).replace('T',' ') : j.substring(0,10);
+}
 function nowStamp() { return new Date().toISOString().replace('T',' ').substring(0,19); }
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1477,6 +1497,13 @@ function getFiltered() {
       case 'location': {
         return (a[field]||'').trim().localeCompare((b[field]||'').trim(), 'ja') * mult;
       }
+      case 'lastStocktakeAt': {
+        const da = toTs(a.lastStocktakeAt||''), db2 = toTs(b.lastStocktakeAt||'');
+        if (!da && !db2) return 0;
+        if (!da) return mult>0 ? -1 : 1;   // 古→新では未実施を先頭に
+        if (!db2) return mult>0 ? 1 : -1;
+        return da.localeCompare(db2) * mult;
+      }
       case 'zaicoUpdatedAt':
       case 'zaicoCreatedAt':
       case 'updatedAt':
@@ -1567,6 +1594,7 @@ function buildExtra(i) {
   if (listFields.priceLocal && i.priceLocal!=null) parts.push(`現地: <strong>${i.priceLocal} ${esc(i.currency)}</strong>`);
   if (listFields.totalVal && i.priceJpy!=null) { const tv=(toNum(i.priceJpy)||0)*toInt(i.qty); parts.push(`在庫金額: <strong>¥${tv.toLocaleString()}</strong>`); }
   if (listFields.receivedDate && i.receivedDate) parts.push(`入荷: ${esc(i.receivedDate)}`);
+  if (listFields.lastStocktakeAt) parts.push(`棚卸: ${i.lastStocktakeAt ? esc(fmtJst(i.lastStocktakeAt)) : '未実施'}`);
   if (listFields.updatedAt) { const d=toDateStr(i.zaicoUpdatedAt||i.updatedAt); if(d) parts.push(`更新: ${d}`); }
   if (!parts.length) return '';
   return `<div class="item-extra">${parts.map(p=>`<span>${p}</span>`).join('')}</div>`;
@@ -1710,7 +1738,7 @@ function openDetail(id) {
       ${dr('入荷日', item.receivedDate||'—')}
       ${dr('ZAICO更新日', toDateStr(item.zaicoUpdatedAt)||'—')}
       ${dr('ZAICO作成日', toDateStr(item.zaicoCreatedAt)||'—')}
-      ${item.lastStocktakeAt ? dr('最終棚卸し', item.lastStocktakeAt) : ''}
+      ${dr('最終棚卸し', item.lastStocktakeAt ? fmtJst(item.lastStocktakeAt, true) : '未実施')}
     </div>
     ${item.memo ? `<div class="detail-section"><div class="detail-section-title">備考</div><div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${esc(item.memo)}</div></div>` : ''}
   `;
@@ -1973,42 +2001,111 @@ function updateHandyCartUI() {
 // =====================================================
 // SCAN — CAMERA
 // =====================================================
-async function openCameraScan() {
+// ---- カメラ共通処理（iPhone Safari対応）----
+let cameraDecodeHandler = null;   // 読取成功時に呼ぶ処理（モードごとに差し替え）
+
+function setCameraStatus(cls, text) {
+  const el = document.getElementById('camera-status');
+  el.className = 'camera-status' + (cls ? ' ' + cls : '');
+  el.textContent = text;
+}
+function cameraErrorText(e) {
+  const raw = (e && (e.message || e.name)) ? `${e.name||''} ${e.message||''}`.trim() : String(e);
+  if (/NotAllowed|Permission/i.test(raw)) return 'カメラが許可されていません（設定 > Safari > カメラ を「許可」に）';
+  if (/NotFound|Requested device not found/i.test(raw)) return 'カメラが見つかりません';
+  if (/NotReadable|Could not start/i.test(raw)) return '他のアプリがカメラを使用中です';
+  if (/secure|https/i.test(raw)) return 'HTTPSで開いてください';
+  return 'カメラ起動失敗: ' + raw;
+}
+function cameraFormats() {
+  if (typeof Html5QrcodeSupportedFormats === 'undefined') return undefined;
+  const F = Html5QrcodeSupportedFormats;
+  return [F.QR_CODE, F.CODE_128, F.CODE_39, F.EAN_13, F.EAN_8, F.UPC_A, F.ITF];
+}
+async function startCameraScanner(title) {
+  // オーバーレイはタップ直後に同期で表示（失敗しても閉じない）
   document.getElementById('camera-overlay').classList.add('show');
-  document.getElementById('camera-title').textContent = '連続スキャン';
-  updateCameraCartInfo();
-  if (typeof Html5Qrcode === 'undefined') { toast('スキャナーライブラリ未読込'); return; }
-  await new Promise(r => setTimeout(r, 200));
+  document.getElementById('camera-title').textContent = title;
+  setCameraStatus('', 'カメラを起動中…');
+
+  if (typeof Html5Qrcode === 'undefined') {
+    setCameraStatus('err', 'スキャナーライブラリ未読込。通信状態を確認し再読込してください／「📷 写真」で読取可');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setCameraStatus('err', 'この画面ではライブカメラが使えません。「📷 写真」ボタンで読み取ってください');
+    return;
+  }
   try {
-    html5QrCode = new Html5Qrcode('camera-reader');
-    await html5QrCode.start({facingMode:'environment'}, {fps:10, qrbox:{width:260,height:260}}, (decoded) => {
-      const code = decoded.trim();
-      const now  = Date.now();
-      if (code===lastScannedCode && (now-lastScannedTime)<1500) return;
-      lastScannedCode = code; lastScannedTime = now;
-      const item = items.find(i => i.barcode===code || i.id===code || i.zaicoId===code);
-      const statusEl = document.getElementById('camera-status');
-      if (item) {
-        scanCart[item.id] = (scanCart[item.id]||0)+1;
-        statusEl.className='camera-status ok';
-        statusEl.textContent=`✓ ${item.name}（${scanCart[item.id]}個目）`;
-        vibrate([40]);
-      } else {
-        const eu = scanCartUnknown.find(u=>u.code===code);
-        if (eu) eu.qty++; else scanCartUnknown.push({code, qty:1});
-        statusEl.className='camera-status warn';
-        statusEl.textContent=`⚠ 未登録: ${code}`;
-        vibrate([50,50,50]);
-      }
-      updateCameraCartInfo();
-      if (html5QrCode?.isScanning) html5QrCode.pause(true);
-      setTimeout(() => { try { if(html5QrCode) html5QrCode.resume(); } catch(e){} }, 1000);
-    }, () => {});
-  } catch(e) { console.error(e); toast('カメラ起動失敗: '+e.message); closeCameraScan(); }
+    if (html5QrCode?.isScanning) await html5QrCode.stop();
+  } catch(e) {}
+  try {
+    html5QrCode = new Html5Qrcode('camera-reader', { formatsToSupport: cameraFormats(), verbose: false });
+    await html5QrCode.start(
+      { facingMode: 'environment' },
+      {
+        fps: 10,
+        // 1次元バーコード向けの横長読取枠（画面幅に追従）
+        qrbox: (w, h) => ({ width: Math.floor(w * 0.85), height: Math.max(80, Math.floor(Math.min(h, w) * 0.4)) }),
+        disableFlip: true,
+      },
+      (decoded) => { if (cameraDecodeHandler) cameraDecodeHandler(decoded.trim()); },
+      () => {}
+    );
+    setCameraStatus('', '商品のバーコード/QRを枠内にかざしてください');
+  } catch(e) {
+    console.error('camera start error', e);
+    setCameraStatus('err', cameraErrorText(e) + '／「📷 写真」でも読取できます');
+  }
+}
+// 写真から読み取り（ライブカメラが使えない端末の確実な代替手段）
+async function scanFromPhoto(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  if (typeof Html5Qrcode === 'undefined') { setCameraStatus('err', 'スキャナーライブラリ未読込'); return; }
+  try { if (html5QrCode?.isScanning) html5QrCode.pause(true); } catch(e) {}
+  setCameraStatus('', '画像を解析中…');
+  try {
+    const reader = new Html5Qrcode('camera-photo-reader', { formatsToSupport: cameraFormats(), verbose: false });
+    const res = await reader.scanFileV2(file, false);
+    reader.clear();
+    if (cameraDecodeHandler) cameraDecodeHandler(res.decodedText.trim());
+  } catch(e) {
+    setCameraStatus('warn', 'バーコードを検出できませんでした。近づけて明るい場所で再撮影してください');
+  }
+  try { if (html5QrCode && html5QrCode.getState && html5QrCode.getState() === 3) html5QrCode.resume(); } catch(e) {}
+}
+
+async function openCameraScan() {
+  document.getElementById('camera-cart-btn').style.display = '';
+  updateCameraCartInfo();
+  cameraDecodeHandler = (code) => {
+    const now = Date.now();
+    if (code===lastScannedCode && (now-lastScannedTime)<1500) return;
+    lastScannedCode = code; lastScannedTime = now;
+    const item = items.find(i => i.barcode===code || i.id===code || i.zaicoId===code);
+    if (item) {
+      scanCart[item.id] = (scanCart[item.id]||0)+1;
+      setCameraStatus('ok', `✓ ${item.name}（${scanCart[item.id]}個目）`);
+      vibrate([40]);
+    } else {
+      const eu = scanCartUnknown.find(u=>u.code===code);
+      if (eu) eu.qty++; else scanCartUnknown.push({code, qty:1});
+      setCameraStatus('warn', `⚠ 未登録: ${code}`);
+      vibrate([50,50,50]);
+    }
+    updateCameraCartInfo();
+    try { if (html5QrCode?.isScanning) html5QrCode.pause(true); } catch(e) {}
+    setTimeout(() => { try { if (html5QrCode) html5QrCode.resume(); } catch(e){} }, 1000);
+  };
+  await startCameraScanner('連続スキャン');
 }
 async function closeCameraScan() {
-  try { if(html5QrCode?.isScanning) await html5QrCode.stop(); } catch(e){}
+  try { if (html5QrCode?.isScanning) await html5QrCode.stop(); } catch(e) {}
+  try { html5QrCode?.clear(); } catch(e) {}
   html5QrCode = null;
+  cameraDecodeHandler = null;
   document.getElementById('camera-overlay').classList.remove('show');
 }
 function updateCameraCartInfo() {
@@ -2106,35 +2203,25 @@ function onStScanSrcChange() {
   else setTimeout(() => document.getElementById('st-scan-input')?.focus(), 100);
 }
 async function openStocktakeCameraScan() {
-  document.getElementById('camera-overlay').classList.add('show');
-  document.getElementById('camera-title').textContent = '棚卸しスキャン';
-  if (typeof Html5Qrcode === 'undefined') { toast('スキャナーライブラリ未読込'); return; }
-  await new Promise(r => setTimeout(r, 200));
-  try {
-    html5QrCode = new Html5Qrcode('camera-reader');
-    await html5QrCode.start({facingMode:'environment'},{fps:10,qrbox:{width:260,height:260}},(decoded) => {
-      const code = decoded.trim();
-      const now = Date.now();
-      if (code===lastScannedCode && (now-lastScannedTime)<1500) return;
-      lastScannedCode=code; lastScannedTime=now;
-      const item = items.find(i=>i.barcode===code||i.id===code||i.zaicoId===code);
-      const statusEl = document.getElementById('camera-status');
-      if (item) {
-        statusEl.className='camera-status ok';
-        statusEl.textContent=`✓ ${item.name} → 棚卸し数入力へ`;
-        if (html5QrCode?.isScanning) html5QrCode.pause(true);
-        setTimeout(async () => {
-          await closeCameraScan();
-          handleStScan(code);
-        }, 800);
-      } else {
-        statusEl.className='camera-status warn';
-        statusEl.textContent=`⚠ 未登録: ${code}`;
-        if (html5QrCode?.isScanning) html5QrCode.pause(true);
-        setTimeout(() => { try { if(html5QrCode) html5QrCode.resume(); } catch(e){} }, 1500);
-      }
-    }, () => {});
-  } catch(e) { console.error(e); }
+  document.getElementById('camera-cart-btn').style.display = 'none';
+  cameraDecodeHandler = (code) => {
+    const now = Date.now();
+    if (code===lastScannedCode && (now-lastScannedTime)<1500) return;
+    lastScannedCode = code; lastScannedTime = now;
+    const item = items.find(i=>i.barcode===code||i.id===code||i.zaicoId===code);
+    if (item) {
+      setCameraStatus('ok', `✓ ${item.name} → 棚卸し数入力へ`);
+      vibrate([40]);
+      try { if (html5QrCode?.isScanning) html5QrCode.pause(true); } catch(e) {}
+      setTimeout(async () => { await closeCameraScan(); handleStScan(code); }, 800);
+    } else {
+      setCameraStatus('warn', `⚠ 未登録: ${code}`);
+      vibrate([50,50,50]);
+      try { if (html5QrCode?.isScanning) html5QrCode.pause(true); } catch(e) {}
+      setTimeout(() => { try { if (html5QrCode) html5QrCode.resume(); } catch(e){} }, 1500);
+    }
+  };
+  await startCameraScanner('棚卸しスキャン');
 }
 function onStHandyEnter(e) {
   if (e.key!=='Enter') return;
@@ -2189,43 +2276,80 @@ function renderStocktake(highlightId) {
     return `<div class="${cls}" data-st-id="${i.id}">${thumbHtml(i)}<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.name)}</div><div style="font-size:11px;color:var(--c-tx2)">${esc(i.location||'')} · システム: ${i.qty}</div>${diffHtml}</div><input type="number" min="0" placeholder="実数" value="${has?stocktakeData[i.id]:''}" style="width:68px;text-align:center;padding:6px;border:.5px solid var(--c-border2);border-radius:var(--r);font-size:14px;background:var(--c-bg);color:var(--c-tx)" onchange="onStInput('${i.id}',this.value)"></div>`;
   }).join('');
 }
+// ---- 棚卸し下書き（端末に自動保存。完了するまで在庫には反映しない）----
+const ST_DRAFT_KEY = 'inv2_stocktake_draft';
+function saveStDraft() {
+  try {
+    if (Object.keys(stocktakeData).length) localStorage.setItem(ST_DRAFT_KEY, JSON.stringify({data:stocktakeData, savedAt:nowStamp()}));
+    else localStorage.removeItem(ST_DRAFT_KEY);
+  } catch(e) { console.error('draft save error', e); }
+  updateStDraftBanner();
+}
+function loadStDraft() {
+  try {
+    const raw = localStorage.getItem(ST_DRAFT_KEY);
+    if (raw) { const d = JSON.parse(raw); stocktakeData = d.data || {}; }
+  } catch(e) { stocktakeData = {}; }
+  updateStDraftBanner();
+}
+function updateStDraftBanner() {
+  const el = document.getElementById('st-draft-banner');
+  if (!el) return;
+  const n = Object.keys(stocktakeData).length;
+  if (!n) { el.style.display='none'; return; }
+  let at = '';
+  try { at = JSON.parse(localStorage.getItem(ST_DRAFT_KEY)||'{}').savedAt || ''; } catch(e) {}
+  el.style.display = '';
+  el.textContent = `⚠ 未確定 ${n}件（端末に一時保存中${at?'・最終 '+at:''}）— 「✓ 完了」で在庫に反映されます`;
+}
 function onStInput(id, val) {
   if (val===''||val==null) delete stocktakeData[id];
   else stocktakeData[id] = parseInt(val)||0;
+  saveStDraft();
   renderStocktake();
 }
 function resetStocktake() {
   if (Object.keys(stocktakeData).length && !confirm('棚卸しデータをリセットしますか？')) return;
   stocktakeData={};
+  saveStDraft();
   if (stScanActive) toggleStScan();
   renderStocktake();
   toast('リセットしました');
 }
 async function completeStocktake() {
-  if (!Object.keys(stocktakeData).length) { toast('棚卸しデータがありません'); return; }
-  let n=0;
-  const modified=[], histEntries=[];
+  const n0 = Object.keys(stocktakeData).length;
+  if (!n0) { toast('棚卸しデータがありません'); return; }
+  if (!confirm(`${n0}件の棚卸し結果を在庫に反映します。よろしいですか？`)) return;
   const stamp = nowStamp();
+  const updated = [], histEntries = [];
   items.forEach(i => {
     if (stocktakeData[i.id]===undefined) return;
-    i.lastStocktakeAt = stamp;
     const actual = stocktakeData[i.id];
-    if (actual!==i.qty) {
-      const diff = actual-i.qty;
-      const h = { itemId:i.id, itemName:i.name, op:diff>0?'in':'out', qty:Math.abs(diff), note:`棚卸し差分（${i.qty}→${actual}）` };
-      histEntries.push(h); ioHistory.unshift({...h, stamp, date:today()});
-      i.qty = actual; i.updatedAt = today(); n++;
+    const copy = {...i, lastStocktakeAt: stamp};
+    if (actual !== i.qty) {
+      const diff = actual - i.qty;
+      histEntries.push({ itemId:i.id, itemName:i.name, op:diff>0?'in':'out', qty:Math.abs(diff), note:`棚卸し差分（${i.qty}→${actual}）` });
+      copy.qty = actual; copy.updatedAt = today();
     }
-    modified.push(i);
+    updated.push(copy);
   });
-  logChange('stocktake', '', `${Object.keys(stocktakeData).length}件確認`, {diffApplied:n});
-  renderList();
-  toast(`棚卸し完了: ${n}件差分更新`);
-  stocktakeData={};
-  if (stScanActive) toggleStScan();
-  renderStocktake();
-  await dbUpsertMany(modified);
+  // 先にDBへ保存。失敗したら画面・下書きは変更しない
+  const ok = await dbUpsertMany(updated);
+  if (!ok) {
+    alert('棚卸し結果の保存に失敗しました。通信状態を確認して、もう一度「完了」を押してください。\n（入力内容は端末に保持されています）');
+    return;
+  }
   if (histEntries.length) await dbAddHistory(histEntries);
+  const byId = new Map(updated.map(u => [u.id, u]));
+  items = items.map(i => byId.get(i.id) || i);
+  histEntries.forEach(h => ioHistory.unshift({...h, stamp, date:today()}));
+  logChange('stocktake', '', `${n0}件確認`, {diffApplied:histEntries.length});
+  stocktakeData = {};
+  saveStDraft();
+  if (stScanActive) toggleStScan();
+  renderList();
+  renderStocktake();
+  toast(`✅ 棚卸し完了: ${n0}件確認・${histEntries.length}件差分更新`);
 }
 
 // =====================================================
