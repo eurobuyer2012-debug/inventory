@@ -3543,13 +3543,49 @@ async function loadItemHistory(item) {
   if (!db) { el.innerHTML = '<div style="font-size:12px;color:var(--c-tx2)">オフラインのため取得できません</div>'; return; }
   let rows = [];
   try {
-    const q = (v) => '"' + String(v).replace(/"/g,'\\"') + '"';
-    const { data, error } = await db.from('io_history').select('*')
-      .or(`item_id.eq.${q(item.id)},item_name.eq.${q(item.name)}`)
-      .order('created_at', { ascending:false }).limit(300);
-    if (error) throw error;
-    rows = data || [];
+    // PostgREST の .or() に品名を手書きで埋め込むと、品名に含まれる特殊文字
+    // （, . : ( ) " \ 空白 など）でフィルタ構文が壊れ 400 になりうる。
+    // supabase-js のパラメータ化 .eq() は値を安全にエンコードするため、
+    // item_id と item_name で別々に取得し、結果を id でマージ・重複排除する。
+    const LIMIT = 300;
+    const queries = [
+      db.from('io_history').select('*').eq('item_id', item.id)
+        .order('created_at', { ascending:false }).limit(LIMIT),
+    ];
+    const name = (item.name == null) ? '' : String(item.name);
+    if (name !== '') {
+      queries.push(
+        db.from('io_history').select('*').eq('item_name', name)
+          .order('created_at', { ascending:false }).limit(LIMIT)
+      );
+    }
+    // 一部のクエリがネットワーク失敗/エラーでも、取得できた分は表示する
+    const settled = await Promise.allSettled(queries);
+    const ok = [], errs = [];
+    settled.forEach(s => {
+      if (s.status === 'fulfilled') { s.value.error ? errs.push(s.value.error) : ok.push(s.value); }
+      else errs.push(s.reason);
+    });
+    if (!ok.length) throw (errs[0] || new Error('不明なエラー'));
+    if (errs.length) console.warn('loadItemHistory partial failure:', errs);
+    // item_id と item_name の両方に一致する行は二重取得されるため id で重複排除
+    const seen = new Set();
+    const merged = [];
+    ok.forEach(r => (r.data || []).forEach(row => {
+      const key = (row.id != null) ? 'id:' + row.id
+        : [row.item_id, row.item_name, row.op, row.qty, row.created_at, row.note].join('|');
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(row);
+    }));
+    // 新しい順（降順）に整列。残数の逆算ロジックがこの並びを前提とする
+    merged.sort((a, b) => {
+      const ta = toTs(a.created_at), tb = toTs(b.created_at);
+      return ta < tb ? 1 : ta > tb ? -1 : 0;
+    });
+    rows = merged.slice(0, LIMIT);
   } catch(e) {
+    console.error('loadItemHistory error:', e);
     el.innerHTML = `<div style="font-size:12px;color:var(--c-danger)">履歴の取得に失敗: ${esc(e.message||e)}</div>`;
     return;
   }
